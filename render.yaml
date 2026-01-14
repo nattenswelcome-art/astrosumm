@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: telegram-summarizer-bot
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt && python -c "import nltk; nltk.download('punkt')"
+    startCommand: python main.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: HUGGINGFACE_TOKEN
+        sync: false
