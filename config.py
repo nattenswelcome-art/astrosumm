@@ -13,6 +13,9 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 # Hugging Face Token (опционально)
 HF_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
 
+# DeepSeek API Key (для улучшенной суммаризации)
+DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
+
 # Настройки обработки текста
 MAX_TEXT_LENGTH = 10000  # Максимальная длина текста для обработки
 SUMMARY_SENTENCES = 5     # Количество предложений в саммари по умолчанию
