@@ -1,6 +1,6 @@
 """
 Модуль для создания кратких содержаний текста
-Использует extractive метод (sumy) с опциональной поддержкой HuggingFace API
+Использует DeepSeek API (отличное качество) с fallback к extractive методу
 """
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
@@ -12,6 +12,70 @@ import config
 import logging
 
 logger = logging.getLogger(__name__)
+
+# DeepSeek API настройки
+DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
+HAS_DEEPSEEK = bool(config.DEEPSEEK_API_KEY)
+
+if HAS_DEEPSEEK:
+    logger.info("DeepSeek API доступен")
+else:
+    logger.warning("DeepSeek API ключ не найден")
+
+
+def summarize_with_deepseek(text: str) -> Optional[str]:
+    """
+    Создает краткое содержание используя DeepSeek API
+    Отличное качество, очень дешево, доступно в России!
+    """
+    if not HAS_DEEPSEEK:
+        logger.debug("DeepSeek API ключ не установлен")
+        return None
+    
+    try:
+        logger.info("Отправка запроса в DeepSeek API...")
+        
+        # Ограничение текста (DeepSeek принимает до 32K токенов)
+        text_limited = text[:4000]
+        
+        headers = {
+            "Authorization": f"Bearer {config.DEEPSEEK_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": "deepseek-chat",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an expert at creating concise, accurate summaries. Create a summary that captures the main ideas in 3-5 clear sentences."
+                },
+                {
+                    "role": "user",
+                    "content": f"Summarize this article:\n\n{text_limited}"
+                }
+            ],
+            "max_tokens": 300,
+            "temperature": 0.3
+        }
+        
+        response = requests.post(DEEPSEEK_URL, headers=headers, json=data, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            summary = result['choices'][0]['message']['content']
+            logger.info(f"DeepSeek саммари создан: {len(summary)} символов")
+            return summary
+        else:
+            logger.warning(f"DeepSeek API вернул статус {response.status_code}: {response.text}")
+            return None
+            
+    except requests.exceptions.Timeout:
+        logger.error("Таймаут при обращении к DeepSeek API")
+        return None
+    except Exception as e:
+        logger.error(f"Ошибка DeepSeek API: {e}")
+        return None
 
 
 def summarize_with_hf(text: str) -> Optional[str]:
@@ -113,7 +177,7 @@ def summarize_extractive(text: str, sentences_count: int = None) -> Optional[str
 def summarize_text(text: str, sentences_count: int = None) -> Optional[str]:
     """
     Главная функция для создания краткого содержания
-    Пытается использовать HF API, затем fallback к extractive методу
+    Пытается использовать DeepSeek API (лучшее качество), затем HF API, затем fallback к extractive методу
     
     Args:
         text: Текст для суммаризации
@@ -130,17 +194,29 @@ def summarize_text(text: str, sentences_count: int = None) -> Optional[str]:
         logger.warning("Текст слишком короткий для суммаризации")
         return None
     
-    # Попытка 1: Hugging Face API (если токен доступен)
+    # Попытка 1: DeepSeek API (если ключ доступен) - отличное качество!
+    if HAS_DEEPSEEK:
+        logger.info("Попытка использовать DeepSeek API...")
+        summary = summarize_with_deepseek(text)
+        if summary:
+            logger.info("✅ Использован DeepSeek API (высокое качество)")
+            return summary
+        logger.info("DeepSeek API не удалось, переход к следующему методу...")
+    
+    # Попытка 2: Hugging Face API (если токен доступен)
     if config.HF_TOKEN:
         logger.info("Попытка использовать HF API...")
         summary = summarize_with_hf(text)
         if summary:
+            logger.info("✅ Использован HF API")
             return summary
         logger.info("HF API не удалось, переход к extractive методу...")
     
-    # Попытка 2: Extractive метод (всегда работает)
+    # Попытка 3: Extractive метод (всегда работает)
     logger.info("Использование extractive метода...")
     summary = summarize_extractive(text, sentences_count)
+    if summary:
+        logger.info("✅ Использован extractive метод")
     
     return summary
 

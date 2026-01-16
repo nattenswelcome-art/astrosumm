@@ -246,12 +246,8 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Прогресс: 100% - готово
         await status_message.edit_text(
-            make_progress_bar(100, "✅ Готово!")
+            make_progress_bar(100, "✅ Обработка завершена!")
         )
-        
-        # Небольшая задержка для визуального эффекта
-        import asyncio
-        await asyncio.sleep(0.5)
         
         # Формирование и отправка финального результата
         # Ограничение длины для Telegram (4096 символов)
@@ -284,7 +280,8 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await status_message.edit_text(response, reply_markup=reply_markup)
+        # Отправляем результат НОВЫМ сообщением, оставляя прогресс-бар видимым
+        await update.message.reply_text(response, reply_markup=reply_markup)
         
         logger.info(
             f"Успешно обработан запрос от пользователя {user.id} для URL: {url}"
@@ -325,50 +322,67 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         translated = context.user_data.get('translated_summary')
         
         if not summary:
-            await query.edit_message_text("❌ Данные для перевода не найдены. Отправьте новую ссылку.")
+            await query.message.reply_text("❌ Данные для перевода не найдены. Отправьте новую ссылку.")
             return
         
-        # Если уже переведено - используем кэш
+        # Если уже переведено - используем кэш и отправляем сразу
         if translated:
             logger.info("Использование кэшированного перевода")
             translated_summary = translated
-        else:
-            # Показываем статус (только если еще не переведено)
-            try:
-                await query.edit_message_text("🌍 Перевожу на русский язык...")
-            except Exception:
-                # Если не удалось редактировать (возможно уже переведено)
-                pass
             
-            try:
-                # Перевод
-                logger.info("Начало перевода саммари на русский...")
-                translated_summary = translate_to_russian(summary)
-                
-                if not translated_summary:
-                    await query.edit_message_text(
-                        "❌ **Ошибка перевода**\n\n"
-                        "Не удалось перевести текст.\n"
-                        "Попробуйте позже или отправьте новую ссылку."
-                    )
-                    logger.error("Не удалось перевести саммари")
-                    return
-                
-                # Сохраняем перевод в кэш
-                context.user_data['translated_summary'] = translated_summary
-                logger.info(f"Перевод завершен и закэширован: {len(translated_summary)} символов")
-                
-            except Exception as e:
-                logger.error(f"Ошибка при переводе: {e}", exc_info=True)
-                try:
-                    await query.edit_message_text(
-                        "❌ **Ошибка перевода**\n\n"
-                        "К сожалению, не удалось перевести текст.\n"
-                        "Попробуйте позже."
-                    )
-                except:
-                    pass
+            # Формирование ответа с переводом
+            response = f"""
+✅ **Краткое содержание (Русский):**
+
+📝 **Содержание:**
+{translated_summary}
+
+━━━━━━━━━━━━━━━━━━━
+
+📊 **Статистика:**
+📄 Исходный текст: {stats['original_words']} слов
+📝 Краткое содержание: {stats['summary_words']} слов
+🗜 Степень сжатия: {stats['compression_ratio']}%
+
+🔗 Источник: {url[:100]}{'...' if len(url) > 100 else ''}
+            """
+            
+            await query.message.reply_text(response)
+            logger.info("Переведенный саммари (из кэша) отправлен пользователю")
+            return
+        
+        # Показываем статус перевода
+        status_msg = await query.message.reply_text("🌍 Перевожу на русский язык...")
+        
+        try:
+            # Перевод
+            logger.info("Начало перевода саммари на русский...")
+            translated_summary = translate_to_russian(summary)
+            
+            if not translated_summary:
+                await status_msg.edit_text(
+                    "❌ **Ошибка перевода**\n\n"
+                    "Не удалось перевести текст.\n"
+                    "Попробуйте позже или отправьте новую ссылку."
+                )
+                logger.error("Не удалось перевести саммари")
                 return
+            
+            # Сохраняем перевод в кэш
+            context.user_data['translated_summary'] = translated_summary
+            logger.info(f"Перевод завершен и закэширован: {len(translated_summary)} символов")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при переводе: {e}", exc_info=True)
+            try:
+                await status_msg.edit_text(
+                    "❌ **Ошибка перевода**\n\n"
+                    "К сожалению, не удалось перевести текст.\n"
+                    "Попробуйте позже."
+                )
+            except:
+                pass
+            return
         
         # Формирование ответа с переводом
         response = f"""
@@ -387,58 +401,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔗 Источник: {url[:100]}{'...' if len(url) > 100 else ''}
         """
         
-        # Кнопка для возврата к английской версии
-        keyboard = [
-            [InlineKeyboardButton("🇬🇧 English version", callback_data='show_english')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
         try:
-            await query.edit_message_text(response, reply_markup=reply_markup)
+            await status_msg.edit_text(response)
             logger.info("Переведенный саммари отправлен пользователю")
         except Exception as e:
-            # Если сообщение уже такое же - игнорируем ошибку
-            if "Message is not modified" in str(e):
-                logger.info("Сообщение уже в нужном состоянии")
-            else:
-                logger.error(f"Ошибка при редактировании: {e}")
-    
-    elif query.data == 'show_english':
-        # Возврат к английской версии
-        summary = context.user_data.get('last_summary')
-        url = context.user_data.get('last_url')
-        stats = context.user_data.get('last_stats')
-        
-        if not summary:
-            await query.edit_message_text("❌ Данные не найдены. Отправьте новую ссылку.")
-            return
-        
-        max_summary_length = 3500
-        if len(summary) > max_summary_length:
-            summary = summary[:max_summary_length] + "..."
-        
-        response = f"""
-✅ **Краткое содержание готово!**
-
-📝 **Содержание (English):**
-{summary}
-
-━━━━━━━━━━━━━━━━━━━
-
-📊 **Статистика:**
-📄 Исходный текст: {stats['original_words']} слов
-📝 Краткое содержание: {stats['summary_words']} слов
-🗜 Степень сжатия: {stats['compression_ratio']}%
-
-🔗 Источник: {url[:100]}{'...' if len(url) > 100 else ''}
-        """
-        
-        keyboard = [
-            [InlineKeyboardButton("🇷🇺 Перевести на русский", callback_data='translate_ru')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(response, reply_markup=reply_markup)
+            logger.error(f"Ошибка при отправке перевода: {e}")
+            # Если не удалось отредактировать - отправим новое сообщение
+            await query.message.reply_text(response)
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
