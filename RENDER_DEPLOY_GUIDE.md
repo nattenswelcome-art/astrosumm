@@ -50,14 +50,14 @@ python main.py
 Нажмите **"Advanced"** и добавьте переменные окружения (Environment Variables):
 
 1. **TELEGRAM_BOT_TOKEN**
-   - Value: `7762151499:AAF5s48EtJfXC-DiJnPGmIY1mu9ghq_SYLI`
+   - Value: ваш токен Telegram бота (смотрите в `.env` файле)
 
-2. **DEEPSEEK_API_KEY** (если есть)
-   - Value: ваш ключ DeepSeek API
+2. **DEEPSEEK_API_KEY** (рекомендуется для лучшего качества)
+   - Value: ваш DeepSeek API ключ (смотрите в `.env` файле)
    - Где взять: https://platform.deepseek.com
 
-3. **HUGGINGFACE_TOKEN** (опционально)
-   - Value: ваш токен HuggingFace
+3. **HUGGINGFACE_TOKEN** (опционально, fallback)
+   - Value: ваш HuggingFace токен (смотрите в `.env` файле)
    - Где взять: https://huggingface.co/settings/tokens
 
 ### Шаг 5: Выбор плана
