@@ -1,5 +1,5 @@
 services:
-  - type: web
+  - type: worker
     name: telegram-summarizer-bot
     env: python
     region: oregon
@@ -8,6 +8,8 @@ services:
     startCommand: python main.py
     envVars:
       - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: DEEPSEEK_API_KEY
         sync: false
       - key: HUGGINGFACE_TOKEN
         sync: false
