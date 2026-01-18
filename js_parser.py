@@ -60,6 +60,13 @@ async def extract_text_from_js_site(url: str, timeout: int = 30000) -> Optional[
             # Получение HTML контента после выполнения JS
             content = await page.content()
             
+            # Получаем text_content как резервный вариант ДО закрытия браузера
+            text_content_backup = None
+            try:
+                text_content_backup = await page.text_content('body')
+            except Exception as e:
+                logger.warning(f"Не удалось получить text_content: {e}")
+            
             logger.info(f"HTML получен: {len(content)} символов")
             
             # Закрыть браузер
@@ -76,12 +83,12 @@ async def extract_text_from_js_site(url: str, timeout: int = 30000) -> Optional[
             if text:
                 logger.info(f"Текст успешно извлечен через Playwright: {len(text)} символов")
                 return text
-            else:
-                # Если trafilatura не сработал, попробуем взять весь текст страницы
+            elif text_content_backup:
+                # Если trafilatura не сработал, используем резервный текст
                 logger.warning("Trafilatura не смог извлечь, используем page.text_content()")
-                text_content = await page.text_content('body')
-                if text_content:
-                    return text_content
+                logger.info(f"Используем резервный text_content: {len(text_content_backup)} символов")
+                return text_content_backup
+            else:
                 logger.error("Не удалось извлечь текст даже после рендеринга JS")
                 return None
                 
